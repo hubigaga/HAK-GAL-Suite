@@ -24,7 +24,6 @@ sentry_sdk.init(
     dsn=os.getenv('SENTRY_DSN'),
     integrations=[
         FlaskIntegration(
-            auto_enabling_integrations=False,
             transaction_style='endpoint'
         ),
     ],
@@ -226,30 +225,28 @@ def capture_output_with_timeout(func, timeout_seconds, *args, **kwargs):
         
         def target():
             try:
-                with sentry_sdk.push_scope() as scope:
-                    scope.set_tag("function", func.__name__)
-                    scope.set_tag("timeout_seconds", timeout_seconds)
-                    
-                    old_stdout = sys.stdout
-                    sys.stdout = captured_output = io.StringIO()
-                    
-                    func(*args, **kwargs)
-                    
-                    sys.stdout = old_stdout
-                    result["output"] = captured_output.getvalue()
-                    
-                    # Sentry Success Metrics
-                    execution_time = time.time() - start_time
-                    sentry_sdk.set_measurement("execution_duration", execution_time)
-                    sentry_sdk.set_tag("execution_status", "success")
-                    
+                sentry_sdk.set_tag("function", func.__name__)
+                sentry_sdk.set_tag("timeout_seconds", timeout_seconds)
+                
+                old_stdout = sys.stdout
+                sys.stdout = captured_output = io.StringIO()
+                
+                func(*args, **kwargs)
+                
+                sys.stdout = old_stdout
+                result["output"] = captured_output.getvalue()
+                
+                # Sentry Success Metrics
+                execution_time = time.time() - start_time
+                sentry_sdk.set_measurement("execution_duration", execution_time)
+                sentry_sdk.set_tag("execution_status", "success")
+                
             except Exception as e:
-                with sentry_sdk.push_scope() as scope:
-                    scope.set_tag("function", func.__name__)
-                    scope.set_tag("execution_status", "error")
-                    scope.set_extra("args_count", len(args))
-                    scope.set_extra("kwargs_count", len(kwargs))
-                    sentry_sdk.capture_exception(e)
+                sentry_sdk.set_tag("function", func.__name__)
+                sentry_sdk.set_tag("execution_status", "error")
+                sentry_sdk.set_extra("args_count", len(args))
+                sentry_sdk.set_extra("kwargs_count", len(kwargs))
+                sentry_sdk.capture_exception(e)
                 result["error"] = str(e)
         
         thread = threading.Thread(target=target)
@@ -261,14 +258,13 @@ def capture_output_with_timeout(func, timeout_seconds, *args, **kwargs):
             print(f"⏱️ TIMEOUT: Command nach {timeout_seconds}s abgebrochen")
             
             # Sentry Timeout Tracking
-            with sentry_sdk.push_scope() as scope:
-                scope.set_tag("function", func.__name__)
-                scope.set_tag("execution_status", "timeout")
-                scope.set_extra("timeout_seconds", timeout_seconds)
-                sentry_sdk.capture_message(
-                    f"Command timeout: {func.__name__} exceeded {timeout_seconds}s",
-                    level="warning"
-                )
+            sentry_sdk.set_tag("function", func.__name__)
+            sentry_sdk.set_tag("execution_status", "timeout")
+            sentry_sdk.set_extra("timeout_seconds", timeout_seconds)
+            sentry_sdk.capture_message(
+                f"Command timeout: {func.__name__} exceeded {timeout_seconds}s",
+                level="warning"
+            )
             
             result["error"] = f"Command-Timeout nach {timeout_seconds} Sekunden"
             # Note: Thread läuft weiter, aber wir ignorieren das Ergebnis
@@ -522,18 +518,17 @@ def handle_command():
         traceback.print_exc()
         
         # Sentry Error Tracking mit Context
-        with sentry_sdk.push_scope() as scope:
-            scope.set_tag("command", command)
-            scope.set_tag("error_type", "command_execution_error")
-            scope.set_extra("command_args", args)
-            scope.set_extra("full_command", full_command)
-            scope.set_extra("timeout_seconds", timeout_seconds)
-            scope.set_context("command_context", {
-                "command": command,
-                "args": args[:100] if len(args) > 100 else args,  # Limit für PII
-                "request_origin": request.origin if request else "unknown"
-            })
-            sentry_sdk.capture_exception(e)
+        sentry_sdk.set_tag("command", command)
+        sentry_sdk.set_tag("error_type", "command_execution_error")
+        sentry_sdk.set_extra("command_args", args)
+        sentry_sdk.set_extra("full_command", full_command)
+        sentry_sdk.set_extra("timeout_seconds", timeout_seconds)
+        sentry_sdk.set_context("command_context", {
+            "command": command,
+            "args": args[:100] if len(args) > 100 else args,  # Limit für PII
+            "request_origin": request.origin if request else "unknown"
+        })
+        sentry_sdk.capture_exception(e)
         
         # Versuche trotzdem State zu holen für Frontend
         try:

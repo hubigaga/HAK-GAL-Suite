@@ -106,29 +106,27 @@ def test_sentry_custom_metrics():
     """Testet HAK-GAL spezifische Metriken"""
     print("\n=== SENTRY CUSTOM METRICS TEST ===")
     
-    # Simuliere HAK-GAL Metriken
-    with sentry_sdk.push_scope() as scope:
-        # Simuliere Portfolio-Performance
-        scope.set_tag("prover_type", "z3")
-        scope.set_extra("proof_success", True)
-        scope.set_extra("proof_duration", 0.234)
-        
-        sentry_sdk.set_measurement("z3_proof_duration", 234)
-        sentry_sdk.capture_message(
-            "Portfolio Prover Test: Z3 Success",
-            level="info"
-        )
+    # Simuliere HAK-GAL Metriken - Moderne API
+    # Simuliere Portfolio-Performance
+    sentry_sdk.set_tag("prover_type", "z3")
+    sentry_sdk.set_extra("proof_success", True)
+    sentry_sdk.set_extra("proof_duration", 0.234)
     
-    with sentry_sdk.push_scope() as scope:
-        # Simuliere LLM Provider
-        scope.set_tag("llm_provider", "deepseek")
-        scope.set_extra("tokens_used", 1250)
-        scope.set_extra("cost_estimate", 0.02)
-        
-        sentry_sdk.capture_message(
-            "LLM Provider Test: DeepSeek Query",
-            level="info"
-        )
+    sentry_sdk.set_measurement("z3_proof_duration", 234)
+    sentry_sdk.capture_message(
+        "Portfolio Prover Test: Z3 Success",
+        level="info"
+    )
+    
+    # Simuliere LLM Provider
+    sentry_sdk.set_tag("llm_provider", "deepseek")
+    sentry_sdk.set_extra("tokens_used", 1250)
+    sentry_sdk.set_extra("cost_estimate", 0.02)
+    
+    sentry_sdk.capture_message(
+        "LLM Provider Test: DeepSeek Query",
+        level="info"
+    )
     
     print("✅ Custom HAK-GAL Metriken an Sentry gesendet")
 

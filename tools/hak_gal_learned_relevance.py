@@ -296,6 +296,22 @@ class AdaptiveRelevanceFilter:
         self.base_filter = base_filter
         self.learning_engine = learning_engine
         self.session_tracking = {}
+    
+    def add_fact(self, fact):
+        """Add fact to base filter"""
+        if hasattr(self.base_filter, 'add_fact'):
+            return self.base_filter.add_fact(fact)
+        else:
+            print(f"[Warning] Base filter {type(self.base_filter).__name__} has no add_fact method")
+            return False
+    
+    def bulk_add_facts(self, facts):
+        """Add multiple facts to base filter"""
+        added_count = 0
+        for fact in facts:
+            if self.add_fact(fact):
+                added_count += 1
+        return added_count
 
     def adaptive_query(self, query: str, user_id: str = "default") -> Tuple[List[Any], str]:
         """

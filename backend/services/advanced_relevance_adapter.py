@@ -100,11 +100,26 @@ class AdvancedRelevanceManagerAdapter:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    loop.run_until_complete(
-                        self.orchestrator.bulk_add_facts(advanced_facts)
-                    )
-                    added_count = len(facts)
-                    logger.info(f"Advanced: {added_count} Fakten hinzugefügt")
+                    # Fix: Handle both sync and async bulk_add_facts methods
+                    try:
+                        bulk_result = self.orchestrator.bulk_add_facts(advanced_facts)
+                        
+                        # Check if result is awaitable (coroutine)
+                        if hasattr(bulk_result, '__await__'):
+                            loop.run_until_complete(bulk_result)
+                        # If it's not awaitable, it's already completed
+                        
+                        added_count = len(facts)
+                        logger.info(f"Advanced: {added_count} Fakten hinzugefügt")
+                    except Exception as e:
+                        logger.error(f"Error in orchestrator bulk_add_facts: {e}")
+                        # Fallback to individual add_fact calls
+                        for fact in advanced_facts:
+                            try:
+                                self.orchestrator.add_fact(fact)
+                                added_count += 1
+                            except Exception as fact_error:
+                                logger.error(f"Error adding individual fact: {fact_error}")
                 finally:
                     loop.close()
             else:

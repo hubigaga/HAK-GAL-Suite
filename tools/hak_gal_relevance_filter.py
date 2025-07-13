@@ -80,6 +80,7 @@ class RelevanceResult:
     score: float
     reason: str
     hops: int = 0
+    metadata: Optional[Dict] = field(default_factory=dict)
 
 
 class RelevanceFilter:
@@ -255,7 +256,8 @@ class RelevanceFilter:
                     fact=fact,
                     score=1.0,
                     reason="Exact match on entities and predicates",
-                    hops=0
+                    hops=0,
+                    metadata={'strategy': 'exact_match', 'confidence': fact.confidence}
                 ))
 
         return results
@@ -283,7 +285,8 @@ class RelevanceFilter:
                     fact=fact,
                     score=score,
                     reason=f"Entity overlap score: {score:.2f}",
-                    hops=0
+                    hops=0,
+                    metadata={'strategy': 'entity_overlap', 'entities': list(context.entities)}
                 ))
 
         return results
@@ -309,7 +312,8 @@ class RelevanceFilter:
                     fact=fact,
                     score=0.7 + 0.3 * keyword_score,
                     reason=f"Predicate match with keyword score: {keyword_score:.2f}",
-                    hops=0
+                    hops=0,
+                    metadata={'strategy': 'predicate_match', 'keyword_score': keyword_score, 'predicates': list(context.predicates)}
                 ))
 
         return results
@@ -348,7 +352,8 @@ class RelevanceFilter:
                         fact=fact,
                         score=min(1.0, base_score + keyword_bonus),
                         reason=f"Graph expansion at {hop} hops",
-                        hops=hop
+                        hops=hop,
+                        metadata={'strategy': 'graph_expansion', 'hop_level': hop, 'keyword_bonus': keyword_bonus}
                     ))
 
                 # Find connected facts for next layer

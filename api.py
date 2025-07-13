@@ -52,6 +52,25 @@ print(f"   ✅ Performance Monitoring: {os.getenv('SENTRY_TRACES_SAMPLE_RATE', '
 # Import der neuen modularen Struktur
 from backend.services import KAssistant
 
+# === BASIC LOGGING INTEGRATION (NO DOCKER REQUIRED) ===
+try:
+    from basic_logging_config import setup_basic_logging
+    hak_gal_logger = setup_basic_logging()
+    hak_gal_logger.info("HAK-GAL Backend started with basic logging")
+    
+    # Log successful backend fixes
+    hak_gal_logger.info("BACKEND-7 Fix deployed: inspect.isawaitable()", 
+                       extra={'backend_issue': 'BACKEND-7', 'fix_status': 'deployed'})
+    hak_gal_logger.info("BACKEND-A Fix deployed: metadata parameter", 
+                       extra={'backend_issue': 'BACKEND-A', 'fix_status': 'deployed'})
+    print("✅ HAK-GAL Basic Logging aktiviert (logs/hak_gal_basic.log)")
+except ImportError:
+    print("⚠️ Basic logging nicht verfügbar")
+    hak_gal_logger = None
+except Exception as e:
+    print(f"⚠️ Basic logging fehler: {e}")
+    hak_gal_logger = None
+
 # --- Timeout-Management ---
 class TimeoutException(Exception):
     pass
@@ -337,21 +356,43 @@ def handle_command():
     args = parts[1] if len(parts) > 1 else ""
     
     print(f"📨 Command empfangen: '{command}' mit Args: '{args}'")
+    
+    # Basic Logging für Commands
+    if hak_gal_logger:
+        hak_gal_logger.info(f"Command received: {command}", extra={
+            'command': command,
+            'args_length': len(args),
+            'request_origin': request.origin
+        })
 
     try:
         response_data = {}
         chat_response = None
         
-        # Verschiedene Timeouts je nach Command-Typ
+        # Verschiedene Timeouts je nach Command-Typ und Komplexität
         timeout_seconds = 30  # Default
         if command in ["ask", "explain"]:
-            timeout_seconds = 45  # Länger für komplexe RAG-Queries
+            # Längere Timeouts für komplexe logische Queries
+            if len(args) > 50 and ('(' in args or 'Zwischen' in args or 'Akkumuliert' in args):
+                timeout_seconds = 90  # Complex logical formulas
+            else:
+                timeout_seconds = 60  # Standard RAG queries
         elif command in ["build_kb"]:
-            timeout_seconds = 60  # Noch länger für Dokumenten-Indizierung
+            timeout_seconds = 120  # Noch länger für Dokumenten-Indizierung
         elif command == "learn":
-            timeout_seconds = 15  # Kürzer für optimierte Learn-Funktion
+            timeout_seconds = 20  # Kürzer für optimierte Learn-Funktion
 
         print(f"⏱️ Command-Timeout: {timeout_seconds}s")
+        
+        # Warnung für komplexe Queries
+        if timeout_seconds >= 90:
+            print(f"⚠️ COMPLEX QUERY DETECTED: Extended timeout ({timeout_seconds}s) for logical formula")
+            if hak_gal_logger:
+                hak_gal_logger.warning(f"Complex query detected: {args[:100]}", extra={
+                    'command': command,
+                    'timeout_seconds': timeout_seconds,
+                    'query_complexity': 'high'
+                })
 
         if command in ["add_raw", "retract", "learn", "build_kb", "clearcache"]:
             # Befehle, die den Zustand ändern UND Ausgaben haben
@@ -510,12 +551,30 @@ def handle_command():
             state["chatResponse"] = chat_response
         
         print(f"✅ Command '{command}' erfolgreich verarbeitet in < {timeout_seconds}s")
+        
+        # Basic Logging für Success
+        if hak_gal_logger:
+            hak_gal_logger.info(f"Command completed: {command}", extra={
+                'command': command,
+                'status': 'success',
+                'timeout_seconds': timeout_seconds
+            })
+        
         return jsonify(state)
 
     except Exception as e:
         error_msg = str(e)
         print(f"❌ Command-Fehler: {error_msg}")
         traceback.print_exc()
+        
+        # Basic Logging für Errors
+        if hak_gal_logger:
+            hak_gal_logger.error(f"Command failed: {command}", extra={
+                'command': command,
+                'error': error_msg,
+                'status': 'error',
+                'timeout_seconds': timeout_seconds
+            })
         
         # Sentry Error Tracking mit Context
         sentry_sdk.set_tag("command", command)

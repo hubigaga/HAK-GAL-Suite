@@ -1,0 +1,255 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    batchwait: 1s
+    batchsize: 1048576
+    timeout: 10s
+
+scrape_configs:
+  # HAK-GAL Backend API Logs
+  - job_name: hak-gal-backend
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: hak-gal-backend
+          service: api
+          environment: development
+          __path__: /var/log/hak-gal/api.log
+
+    pipeline_stages:
+      # Parse JSON logs from HAK-GAL backend
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            module: module
+            function: function
+            message: message
+            trace_id: trace_id
+            span_id: span_id
+            user_id: user_id
+            command: command
+            query_time_ms: query_time_ms
+            error_type: error_type
+
+      # Extract timestamp
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+
+      # Add labels for filtering
+      - labels:
+          level:
+          module:
+          function:
+          service:
+          environment:
+          command:
+          error_type:
+
+      # Add metrics
+      - metrics:
+          hak_gal_log_lines_total:
+            type: Counter
+            description: "Total number of log lines from HAK-GAL"
+            source: level
+            config:
+              action: inc
+          
+          hak_gal_errors_total:
+            type: Counter
+            description: "Total number of errors in HAK-GAL"
+            source: level
+            config:
+              action: inc
+              match_all: true
+              count_entry_bytes: false
+              value: "{{ if eq .level \"ERROR\" }}1{{ else }}0{{ end }}"
+
+          hak_gal_query_duration:
+            type: Histogram
+            description: "HAK-GAL query processing duration"
+            source: query_time_ms
+            config:
+              buckets: [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
+
+  # HAK-GAL Sentry Integration Logs
+  - job_name: hak-gal-sentry
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: hak-gal-sentry
+          service: error-tracking
+          environment: development
+          __path__: /var/log/hak-gal/sentry.log
+
+    pipeline_stages:
+      - json:
+          expressions:
+            issue_id: issue_id
+            error_type: error_type
+            culprit: culprit
+            level: level
+            fingerprint: fingerprint
+
+      - labels:
+          issue_id:
+          error_type:
+          culprit:
+          level:
+
+  # HAK-GAL Performance Logs
+  - job_name: hak-gal-performance
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: hak-gal-performance
+          service: performance
+          environment: development
+          __path__: /var/log/hak-gal/performance.log
+
+    pipeline_stages:
+      - json:
+          expressions:
+            operation: operation
+            duration_ms: duration_ms
+            memory_mb: memory_mb
+            cpu_percent: cpu_percent
+            cache_hit: cache_hit
+
+      - labels:
+          operation:
+          cache_hit:
+
+      - metrics:
+          hak_gal_operation_duration:
+            type: Histogram
+            description: "HAK-GAL operation duration"
+            source: duration_ms
+            config:
+              buckets: [10, 50, 100, 500, 1000, 5000, 10000, 30000]
+
+  # HAK-GAL Advanced Tools Logs
+  - job_name: hak-gal-advanced-tools
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: hak-gal-advanced-tools
+          service: advanced-tools
+          environment: development
+          __path__: /var/log/hak-gal/advanced_tools.log
+
+    pipeline_stages:
+      - json:
+          expressions:
+            tool: tool
+            strategy: strategy
+            facts_processed: facts_processed
+            relevance_score: relevance_score
+            async_operation: async_operation
+
+      - labels:
+          tool:
+          strategy:
+          async_operation:
+
+  # System Logs (Docker containers)
+  - job_name: docker-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: label
+            values: ["logging=promtail"]
+
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/?(.*)'
+        target_label: 'container'
+      
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: 'stream'
+
+    pipeline_stages:
+      - docker: {}
+      
+      # Parse container logs
+      - match:
+          selector: '{container="hak-gal-backend"}'
+          stages:
+            - json:
+                expressions:
+                  level: level
+                  message: message
+                  timestamp: timestamp
+            
+            - labels:
+                level:
+
+      # Filter out noise
+      - drop:
+          expression: '.*healthcheck.*'
+      
+      - drop:
+          expression: '.*ping.*'
+
+  # HAK-GAL Specific Error Patterns
+  - job_name: hak-gal-errors
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: hak-gal-errors
+          service: error-detection
+          environment: development
+          __path__: /var/log/hak-gal/*.log
+
+    pipeline_stages:
+      # Detect BACKEND-* issues specifically
+      - match:
+          selector: '{job="hak-gal-errors"}'
+          stages:
+            - regex:
+                expression: '.*BACKEND-(?P<issue_id>[A-Z0-9]+).*'
+            
+            - labels:
+                backend_issue: '{{ .issue_id }}'
+
+      # Detect asyncio issues
+      - match:
+          selector: '{job="hak-gal-errors"}'
+          stages:
+            - regex:
+                expression: '.*asyncio\.Future.*|.*awaitable.*'
+            
+            - labels:
+                error_pattern: 'asyncio'
+
+      # Detect RelevanceResult issues  
+      - match:
+          selector: '{job="hak-gal-errors"}'
+          stages:
+            - regex:
+                expression: '.*RelevanceResult.*metadata.*'
+            
+            - labels:
+                error_pattern: 'metadata'
+
+      # Metrics for error tracking
+      - metrics:
+          hak_gal_backend_errors:
+            type: Counter
+            description: "HAK-GAL backend errors by issue ID"
+            source: backend_issue
+            config:
+              action: inc

@@ -1,0 +1,68 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  - "hak_gal_rules.yml"
+
+# Scrape configuration
+scrape_configs:
+  # HAK-GAL Backend API
+  - job_name: 'hak-gal-backend'
+    static_configs:
+      - targets: ['host.docker.internal:5001']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    honor_labels: false
+    params:
+      format: ['prometheus']
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Loki metrics
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+    metrics_path: '/metrics'
+
+  # Promtail metrics
+  - job_name: 'promtail'
+    static_configs:
+      - targets: ['promtail:9080']
+    metrics_path: '/metrics'
+
+  # Grafana metrics
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    metrics_path: '/metrics'
+
+  # Node Exporter (if available)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['host.docker.internal:9100']
+    scrape_interval: 30s
+
+  # HAK-GAL Custom Metrics from Promtail
+  - job_name: 'hak-gal-logs-metrics'
+    static_configs:
+      - targets: ['promtail:9080']
+    metrics_path: '/metrics'
+    honor_labels: true
+    metric_relabel_configs:
+      # Only keep HAK-GAL specific metrics
+      - source_labels: [__name__]
+        regex: 'hak_gal_.*'
+        action: keep

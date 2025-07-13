@@ -1,0 +1,152 @@
+groups:
+  - name: hak_gal_backend_alerts
+    rules:
+      # Critical Error Rate Alert
+      - alert: HAKGALHighErrorRate
+        expr: rate(hak_gal_log_lines_total{level="ERROR"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          service: hak-gal-backend
+        annotations:
+          summary: "HAK-GAL Backend has high error rate"
+          description: "Error rate is {{ $value }} errors per second for the last 5 minutes."
+          runbook_url: "https://docs.hak-gal.org/runbooks/high-error-rate"
+
+      # Backend Issue Alert (BACKEND-* patterns)
+      - alert: HAKGALBackendIssue
+        expr: increase(hak_gal_backend_errors[5m]) > 0
+        for: 0m  # Immediate alert
+        labels:
+          severity: critical
+          service: hak-gal-backend
+          issue_type: "{{ $labels.backend_issue }}"
+        annotations:
+          summary: "HAK-GAL Backend issue detected: BACKEND-{{ $labels.backend_issue }}"
+          description: "New BACKEND-{{ $labels.backend_issue }} issue detected with {{ $value }} occurrences in the last 5 minutes."
+          sentry_url: "https://de.sentry.io/organizations/samui-science-lab/issues/HAK-GAL-BACKEND-{{ $labels.backend_issue }}/"
+
+      # High Query Response Time
+      - alert: HAKGALSlowQueries
+        expr: histogram_quantile(0.95, rate(hak_gal_query_duration_bucket[5m])) > 5000
+        for: 3m
+        labels:
+          severity: warning
+          service: hak-gal-backend
+        annotations:
+          summary: "HAK-GAL queries are slow"
+          description: "95th percentile query time is {{ $value }}ms, exceeding 5 second threshold."
+
+      # Service Down Alert
+      - alert: HAKGALServiceDown
+        expr: up{job="hak-gal-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: hak-gal-backend
+        annotations:
+          summary: "HAK-GAL Backend service is down"
+          description: "HAK-GAL Backend service has been down for more than 1 minute."
+          action: "Check Docker containers and restart if necessary"
+
+      # High Memory Usage
+      - alert: HAKGALHighMemoryUsage
+        expr: avg_over_time(hak_gal_memory_mb[10m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: hak-gal-backend
+        annotations:
+          summary: "HAK-GAL Backend high memory usage"
+          description: "Average memory usage is {{ $value }}MB over the last 10 minutes."
+
+      # Asyncio Error Pattern
+      - alert: HAKGALAsyncioErrors
+        expr: increase(hak_gal_log_lines_total{error_pattern="asyncio"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: hak-gal-backend
+          error_type: asyncio
+        annotations:
+          summary: "HAK-GAL asyncio errors detected"
+          description: "{{ $value }} asyncio-related errors in the last 10 minutes."
+          fix_hint: "Check for inspect.isawaitable() usage in advanced_relevance_adapter.py"
+
+      # Metadata Error Pattern
+      - alert: HAKGALMetadataErrors
+        expr: increase(hak_gal_log_lines_total{error_pattern="metadata"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: hak-gal-backend
+          error_type: metadata
+        annotations:
+          summary: "HAK-GAL metadata compatibility errors"
+          description: "{{ $value }} metadata-related errors in the last 10 minutes."
+          fix_hint: "Check RelevanceResult class metadata parameter support"
+
+      # Command Timeout Alert
+      - alert: HAKGALCommandTimeouts
+        expr: increase(hak_gal_log_lines_total{level="ERROR"}[15m]) and on() hak_gal_log_lines_total{message=~".*timeout.*"}
+        for: 1m
+        labels:
+          severity: warning
+          service: hak-gal-backend
+          error_type: timeout
+        annotations:
+          summary: "HAK-GAL command timeouts detected"
+          description: "Command timeout errors detected in the last 15 minutes."
+          action: "Check for complex queries and consider timeout increases"
+
+  - name: hak_gal_performance_alerts
+    rules:
+      # Query Volume Alert
+      - alert: HAKGALHighQueryVolume
+        expr: rate(hak_gal_query_duration_count[5m]) > 10
+        for: 5m
+        labels:
+          severity: info
+          service: hak-gal-backend
+        annotations:
+          summary: "HAK-GAL high query volume"
+          description: "Query rate is {{ $value }} queries per second."
+
+      # Cache Hit Rate Alert
+      - alert: HAKGALLowCacheHitRate
+        expr: rate(hak_gal_cache_hits_total[10m]) / rate(hak_gal_cache_requests_total[10m]) < 0.7
+        for: 5m
+        labels:
+          severity: warning
+          service: hak-gal-backend
+        annotations:
+          summary: "HAK-GAL low cache hit rate"
+          description: "Cache hit rate is {{ $value | humanizePercentage }} over the last 10 minutes."
+
+  - name: hak_gal_business_alerts
+    rules:
+      # ML Query Success Rate
+      - alert: HAKGALMLQueryFailures
+        expr: rate(hak_gal_log_lines_total{command=~"ask|explain", level="ERROR"}[10m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+          service: hak-gal-backend
+          business_impact: ml_queries
+        annotations:
+          summary: "HAK-GAL ML query failures"
+          description: "ML query error rate is {{ $value }} over the last 10 minutes."
+          business_impact: "Users cannot perform AI-enhanced queries"
+
+      # Learning System Failures
+      - alert: HAKGALLearningSystemFailures
+        expr: rate(hak_gal_log_lines_total{command="learn", level="ERROR"}[15m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: hak-gal-backend
+          business_impact: learning
+        annotations:
+          summary: "HAK-GAL learning system failures"
+          description: "Learning command errors detected: {{ $value }} per second."
+          business_impact: "AI system cannot learn from new facts"

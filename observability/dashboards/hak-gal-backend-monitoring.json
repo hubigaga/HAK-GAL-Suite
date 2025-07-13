@@ -1,0 +1,209 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "HAK-GAL Backend Monitoring",
+    "tags": ["hak-gal", "backend", "observability"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Error Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(hak_gal_log_lines_total{level=\"ERROR\"}[5m])",
+            "legendFormat": "Error Rate",
+            "datasource": {"uid": "HAK-GAL-Prometheus"}
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 0.01},
+                {"color": "red", "value": 0.05}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Query Response Time",
+        "type": "stat", 
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(hak_gal_query_duration_bucket[5m]))",
+            "legendFormat": "95th Percentile",
+            "datasource": {"uid": "HAK-GAL-Prometheus"}
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1000},
+                {"color": "red", "value": 5000}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Backend Issues",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(hak_gal_backend_errors[5m])",
+            "legendFormat": "Backend Errors",
+            "datasource": {"uid": "HAK-GAL-Prometheus"}
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "red", "value": 0.001}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "System Health",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"hak-gal-backend\"}",
+            "legendFormat": "Backend Status",
+            "datasource": {"uid": "HAK-GAL-Prometheus"}
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"options": {"0": {"text": "DOWN"}}, "type": "value"},
+              {"options": {"1": {"text": "UP"}}, "type": "value"}
+            ],
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "Recent Error Logs",
+        "type": "logs",
+        "targets": [
+          {
+            "expr": "{job=\"hak-gal-backend\", level=\"ERROR\"} |= \"BACKEND-\"",
+            "datasource": {"uid": "HAK-GAL-Loki"}
+          }
+        ],
+        "gridPos": {"h": 12, "w": 24, "x": 0, "y": 8},
+        "options": {
+          "showTime": true,
+          "showLabels": true,
+          "showCommonLabels": false,
+          "wrapLogMessage": true,
+          "sortOrder": "Descending"
+        }
+      },
+      {
+        "id": 6,
+        "title": "Query Performance Histogram",
+        "type": "heatmap",
+        "targets": [
+          {
+            "expr": "increase(hak_gal_query_duration_bucket[1m])",
+            "legendFormat": "{{le}}",
+            "datasource": {"uid": "HAK-GAL-Prometheus"}
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+        "options": {
+          "calculate": false,
+          "yAxis": {"unit": "ms"}
+        }
+      },
+      {
+        "id": 7,
+        "title": "Command Usage",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (command) (rate(hak_gal_log_lines_total[5m]))",
+            "legendFormat": "{{command}}",
+            "datasource": {"uid": "HAK-GAL-Prometheus"}
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20}
+      },
+      {
+        "id": 8,
+        "title": "Async Operations Status",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "sum by (async_operation) (rate(hak_gal_log_lines_total{job=\"hak-gal-advanced-tools\"}[5m]))",
+            "legendFormat": "{{async_operation}}",
+            "datasource": {"uid": "HAK-GAL-Prometheus"}
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 28},
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "pointSize": 5,
+              "showPoints": "always"
+            }
+          }
+        }
+      }
+    ],
+    "time": {"from": "now-1h", "to": "now"},
+    "refresh": "5s",
+    "schemaVersion": 27,
+    "version": 1
+  },
+  "meta": {
+    "type": "db",
+    "canSave": true,
+    "canEdit": true,
+    "canAdmin": true,
+    "canStar": true,
+    "slug": "hak-gal-backend-monitoring",
+    "url": "/d/hak-gal-backend/hak-gal-backend-monitoring",
+    "expires": "0001-01-01T00:00:00Z",
+    "created": "2025-07-13T16:00:00Z",
+    "updated": "2025-07-13T16:00:00Z",
+    "updatedBy": "admin",
+    "createdBy": "admin",
+    "version": 1,
+    "hasAcl": false,
+    "isFolder": false,
+    "folderId": 0,
+    "folderTitle": "HAK-GAL",
+    "folderUrl": "",
+    "provisioned": true,
+    "provisionedExternalId": "hak-gal-backend-monitoring.json"
+  }
+}

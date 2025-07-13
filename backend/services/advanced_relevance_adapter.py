@@ -7,6 +7,7 @@ Behält vollständige Rückwärtskompatibilität bei.
 """
 
 import asyncio
+import inspect
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from dataclasses import dataclass
 import logging
@@ -68,11 +69,15 @@ class AdvancedRelevanceManagerAdapter:
                 # Convert Legacy to Advanced format
                 advanced_fact = self._convert_to_advanced_fact(fact)
                 
-                # Use asyncio to run async method
+                # Use asyncio to run async method with proper awaitable detection
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    loop.run_until_complete(self.orchestrator.add_fact(advanced_fact))
+                    add_result = self.orchestrator.add_fact(advanced_fact)
+                    # CORRECTED: Use inspect.isawaitable for proper awaitable detection
+                    if inspect.isawaitable(add_result):
+                        loop.run_until_complete(add_result)
+                    # If not awaitable, add_fact was synchronous
                     logger.debug(f"Advanced: Fakt {fact.id} hinzugefügt")
                     return True
                 finally:
@@ -104,8 +109,8 @@ class AdvancedRelevanceManagerAdapter:
                     try:
                         bulk_result = self.orchestrator.bulk_add_facts(advanced_facts)
                         
-                        # Check if result is awaitable (coroutine)
-                        if hasattr(bulk_result, '__await__'):
+                        # CORRECTED: Use inspect.isawaitable for proper awaitable detection
+                        if inspect.isawaitable(bulk_result):
                             loop.run_until_complete(bulk_result)
                         # If it's not awaitable, it's already completed
                         
@@ -165,8 +170,8 @@ class AdvancedRelevanceManagerAdapter:
                             query_string, user_id=user_id, max_results=max_results
                         )
                         
-                        # Check if result is awaitable (coroutine)
-                        if hasattr(query_results, '__await__'):
+                        # CORRECTED: Use inspect.isawaitable for proper awaitable detection
+                        if inspect.isawaitable(query_results):
                             query_results = await query_results
                         
                         # Handle both list and async generator returns

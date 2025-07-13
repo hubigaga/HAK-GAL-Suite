@@ -1,6 +1,5 @@
 # HAK-GAL Suite: A Hybrid Reasoning Framework
 
-![Build Status](https://github.com/sookoothaii/HAK-GAL-Suite/actions/workflows/ci.yml/badge.svg)
 ![Sentry](https://img.shields.io/badge/Sentry-Monitor-green)
 
 HAK-GAL is a scalable AI-reasoning framework that integrates neural flexibility with symbolic verification and real-time monitoring.

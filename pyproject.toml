@@ -1,0 +1,38 @@
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["backend/tests"]
+pythonpath = [".", "backend"]
+addopts = "-ra -q"
+
+[project]
+name = "hak-gal-suite"
+version = "7.0.0"
+description = "HAK-GAL SUITE - First-Order Logic Knowledge Base System"
+readme = "README.md"
+requires-python = ">=3.8"
+
+dependencies = [
+    "openai",
+    "google-generativeai",
+    "sentence-transformers",
+    "numpy",
+    "faiss-cpu",
+    "pypdf",
+    "z3-solver",
+    "lark",
+    "wolframalpha",
+    "python-dotenv"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov",
+    "black",
+    "flake8",
+    "mypy"
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

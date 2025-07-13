@@ -9,9 +9,12 @@ import { Separator } from "@/components/ui/separator";
 import { 
   Trash2, Send, Upload, Loader2, Sun, Moon, 
   Brain, Database, MessageSquare, FileText,
-  Settings, Activity
+  Settings, Activity, Cpu
 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTheme } from "@/hooks/useTheme";
+import OrchestratorDashboard from "@/components/orchestrator/OrchestratorDashboard";
+import AdvancedQueryBuilder from "@/components/query/AdvancedQueryBuilder";
 
 type Message = {
   type: "user" | "system";
@@ -24,7 +27,7 @@ const Index = () => {
   
   const [inputMessage, setInputMessage] = useState("");
   const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
-  const [rightPanelView, setRightPanelView] = useState("rag");
+  const [activeTab, setActiveTab] = useState("rag");
   const [profileEntity, setProfileEntity] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -92,9 +95,9 @@ const Index = () => {
     if (commandString.toLowerCase().startsWith("what_is ")) {
         const entity = commandString.slice(8).trim();
         setProfileEntity(entity);
-        setRightPanelView("profile");
+        setActiveTab("profile");
     } else {
-        setRightPanelView("rag");
+        setActiveTab("rag");
     }
 
     try {
@@ -610,7 +613,7 @@ const Index = () => {
         </Card>
         </div>
 
-        {/* RAG Context Panel - 1/3 WIDTH, FULL HEIGHT */}
+        {/* Advanced Control Panel - TAB SYSTEM */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <Card 
             className="flex flex-col border h-full"
@@ -622,66 +625,133 @@ const Index = () => {
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2" style={{ color: theme.colors.text }}>
               <Settings className="h-5 w-5" style={{ color: theme.colors.primary }} />
-              {rightPanelView === "rag" ? "RAG Context" : `Profile: ${profileEntity}`}
+              Advanced Control Panel
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 overflow-hidden">
-            {rightPanelView === "rag" ? (
-              <ScrollArea 
-                className="h-full rounded-lg border p-4"
-                style={{ 
-                  borderColor: theme.colors.border,
-                  backgroundColor: theme.colors.background
-                }}
-              >
-                <div 
-                  className="text-sm font-mono leading-relaxed overflow-x-auto"
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+              <TabsList className="grid w-full grid-cols-4 mb-4">
+                <TabsTrigger 
+                  value="rag" 
+                  className="flex items-center gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  RAG Context
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="orchestrator" 
+                  className="flex items-center gap-2"
+                >
+                  <Cpu className="h-4 w-4" />
+                  Orchestrator
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="query" 
+                  className="flex items-center gap-2"
+                >
+                  <Settings className="h-4 w-4" />
+                  Query Builder
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="profile" 
+                  className="flex items-center gap-2"
+                >
+                  <Brain className="h-4 w-4" />
+                  Profile
+                </TabsTrigger>
+              </TabsList>
+              
+              {/* RAG Context Tab */}
+              <TabsContent value="rag" className="flex-1 overflow-hidden">
+                <ScrollArea 
+                  className="h-full rounded-lg border p-4"
                   style={{ 
-                    color: theme.colors.textSecondary,
-                    whiteSpace: 'pre',
-                    wordBreak: 'break-all',
-                    minWidth: 'max-content'
+                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.background
                   }}
                 >
-                  {ragContext}
-                </div>
-              </ScrollArea>
-            ) : (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-sm font-medium mb-3" style={{ color: theme.colors.textSecondary }}>
-                    Explicit Facts
-                  </h3>
                   <div 
-                    className="p-4 rounded-lg border"
+                    className="text-sm font-mono leading-relaxed overflow-x-auto"
                     style={{ 
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border
+                      color: theme.colors.textSecondary,
+                      whiteSpace: 'pre',
+                      wordBreak: 'break-all',
+                      minWidth: 'max-content'
                     }}
                   >
-                    <span className="text-sm" style={{ color: theme.colors.textMuted }}>
-                      Not yet implemented.
-                    </span>
+                    {ragContext}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+              
+              {/* Orchestrator Dashboard Tab */}
+              <TabsContent value="orchestrator" className="flex-1 overflow-hidden">
+                <div className="h-full overflow-auto">
+                  <OrchestratorDashboard />
+                </div>
+              </TabsContent>
+              
+              {/* Advanced Query Builder Tab */}
+              <TabsContent value="query" className="flex-1 overflow-hidden">
+                <div className="h-full overflow-auto">
+                  <AdvancedQueryBuilder onExecuteQuery={(query) => sendCommandToBackend(query)} />
+                </div>
+              </TabsContent>
+              
+              {/* Profile Tab */}
+              <TabsContent value="profile" className="flex-1 overflow-hidden">
+                <div className="space-y-6 h-full overflow-auto">
+                  <div>
+                    <h3 className="text-sm font-medium mb-3" style={{ color: theme.colors.textSecondary }}>
+                      Entity: {profileEntity || "None selected"}
+                    </h3>
+                    <div 
+                      className="p-4 rounded-lg border"
+                      style={{ 
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.border
+                      }}
+                    >
+                      <span className="text-sm" style={{ color: theme.colors.textMuted }}>
+                        Use "what_is EntityName" to analyze entities.
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium mb-3" style={{ color: theme.colors.textSecondary }}>
+                      Explicit Facts
+                    </h3>
+                    <div 
+                      className="p-4 rounded-lg border"
+                      style={{ 
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.border
+                      }}
+                    >
+                      <span className="text-sm" style={{ color: theme.colors.textMuted }}>
+                        Facts will appear here after analysis.
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium mb-3" style={{ color: theme.colors.textSecondary }}>
+                      Derived Properties
+                    </h3>
+                    <div 
+                      className="p-4 rounded-lg border"
+                      style={{ 
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.border
+                      }}
+                    >
+                      <span className="text-sm" style={{ color: theme.colors.textMuted }}>
+                        Derived properties will appear here.
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-medium mb-3" style={{ color: theme.colors.textSecondary }}>
-                    Derived Properties
-                  </h3>
-                  <div 
-                    className="p-4 rounded-lg border"
-                    style={{ 
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border
-                    }}
-                  >
-                    <span className="text-sm" style={{ color: theme.colors.textMuted }}>
-                      Not yet implemented.
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
         </div>

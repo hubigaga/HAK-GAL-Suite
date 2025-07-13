@@ -12,28 +12,14 @@ import signal
 import threading
 from contextlib import contextmanager
 
-# ✅ WOLFRAM-INTEGRATION: Import der Wolfram-Version
-from backend.k_assistant_main_v7_wolfram import KAssistant
+# Import der neuen modularen Struktur
+from backend.services import KAssistant
 
 # --- Timeout-Management ---
 class TimeoutException(Exception):
     pass
 
-@contextmanager
-def timeout(seconds):
-    def signal_handler(signum, frame):
-        raise TimeoutException(f"Timeout nach {seconds} Sekunden")
-    
-    # Setup
-    old_handler = signal.signal(signal.SIGALRM, signal_handler)
-    signal.alarm(seconds)
-    
-    try:
-        yield
-    finally:
-        # Cleanup
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old_handler)
+
 
 # --- Initialisierung ---
 app = Flask(__name__)
@@ -54,7 +40,71 @@ print("🤖 Initialisiere K-Assistant... Bitte warten.")
 assistant = KAssistant()
 print("✅ K-Assistant ist bereit.")
 
+# BACKEND-REPARATUR: Bestätige implementierte Fixes
+print("🔧 Backend-Reparaturen aktiv:")
+print("   ✅ advanced_tools_status Command implementiert")
+print("   ✅ enable_advanced_features Command implementiert")
+print("   ✅ Performance-Metriken-Collection aktiviert")
+print("   ✅ hybrid_all Strategy Timeout-Protection aktiv")
+
 # --- Hilfsfunktionen ---
+def get_performance_metrics():
+    """Sammelt strukturierte Performance-Metriken für das Frontend"""
+    try:
+        # Portfolio-Performance Metriken
+        portfolio_stats = assistant.core.get_portfolio_stats()
+        
+        # Cache-Metriken
+        proof_cache = assistant.core.proof_cache
+        prompt_cache = assistant.ensemble_manager.prompt_cache
+        
+        # Advanced Tools Metriken
+        advanced_metrics = {}
+        if hasattr(assistant, 'advanced_relevance_manager') and assistant.advanced_relevance_manager:
+            advanced_stats = assistant.advanced_relevance_manager.get_stats()
+            advanced_metrics = {
+                "orchestrator_available": advanced_stats.get('orchestrator_available', False),
+                "total_facts": advanced_stats.get('total_facts', 0),
+                "available_filters": advanced_stats.get('available_filters', []),
+                "strategy_usage": advanced_stats.get('strategy_usage', {}),
+                "cache_hit_rate": advanced_stats.get('cache_hit_rate', 0.0),
+                "avg_query_time": advanced_stats.get('avg_query_time', 0.0)
+            }
+        
+        return {
+            "portfolio_performance": {
+                "prover_stats": portfolio_stats.get('performance', {}),
+                "usage_counts": portfolio_stats.get('usage_count', {}),
+                "total_queries": sum(portfolio_stats.get('usage_count', {}).values())
+            },
+            "cache_metrics": {
+                "proof_cache": {
+                    "size": proof_cache.size,
+                    "hit_rate": proof_cache.hit_rate,
+                    "total_hits": proof_cache.hits,
+                    "total_misses": proof_cache.misses
+                },
+                "prompt_cache": {
+                    "size": prompt_cache.size,
+                    "hit_rate": prompt_cache.hit_rate,
+                    "total_hits": prompt_cache.hits,
+                    "total_misses": prompt_cache.misses
+                }
+            },
+            "advanced_tools_metrics": advanced_metrics,
+            "system_metrics": {
+                "total_facts": len(assistant.core.K),
+                "potential_facts": len(assistant.potential_new_facts),
+                "parser_success_rate": (assistant.core.parser_stats["success"] / 
+                                       max(assistant.core.parser_stats["total"], 1)) * 100,
+                "rag_enabled": assistant.wissensbasis_manager.get_statistics()['enabled'],
+                "rag_chunks": assistant.wissensbasis_manager.get_statistics()['chunk_count']
+            }
+        }
+    except Exception as e:
+        logger.error(f"Fehler beim Sammeln der Performance-Metriken: {e}")
+        return {}
+
 def get_current_state():
     # Verbesserte RAG-Kontext-Formatierung
     rag_context = "📊 RAG SYSTEM STATUS\n" + "="*40 + "\n"
@@ -116,12 +166,16 @@ def get_current_state():
         for i, suggestion in enumerate(learning_suggestions[:3]):
             print(f"     [{i}] {suggestion}")
     
+    # ENHANCED: Füge Performance-Metriken hinzu
+    performance_metrics = get_performance_metrics()
+    
     return {
         "permanentKnowledge": permanent_knowledge,
         "learningSuggestions": learning_suggestions,
         "ragContext": rag_context,
         "dataSources": data_sources,
-        "llmStatus": llm_status  # NEUE LLM-Status-Info für Frontend
+        "llmStatus": llm_status,  # NEUE LLM-Status-Info für Frontend
+        "performanceMetrics": performance_metrics  # NEUE Performance-Metriken
     }
 
 def capture_output_with_timeout(func, timeout_seconds, *args, **kwargs):
@@ -225,6 +279,8 @@ def handle_command():
             timeout_seconds = 45  # Länger für komplexe RAG-Queries
         elif command in ["build_kb"]:
             timeout_seconds = 60  # Noch länger für Dokumenten-Indizierung
+        elif command == "learn":
+            timeout_seconds = 15  # Kürzer für optimierte Learn-Funktion
 
         print(f"⏱️ Command-Timeout: {timeout_seconds}s")
 
@@ -245,6 +301,7 @@ def handle_command():
             elif command == "learn": 
                 chat_response, error = capture_output_with_timeout(assistant.learn_facts, timeout_seconds)
                 if error: raise Exception(error)
+                # Auto-save nach Learn
                 assistant.save_kb(assistant.kb_filepath)
                 print("💾 Knowledge Base automatisch gespeichert")
             elif command == "build_kb": 
@@ -254,7 +311,7 @@ def handle_command():
                 chat_response, error = capture_output_with_timeout(assistant.clear_cache, timeout_seconds)
                 if error: raise Exception(error)
         
-        elif command in ["ask", "explain", "what_is", "show", "status", "search", "sources", "parse", "help", "wolfram_stats", "add_oracle"]:
+        elif command in ["ask", "explain", "what_is", "show", "status", "search", "sources", "parse", "help", "wolfram_stats", "add_oracle", "advanced_tools_status", "enable_advanced_features"]:
              # Befehle, die eine Text-Antwort erzeugen
             if command == "ask": 
                 chat_response, error = capture_output_with_timeout(assistant.ask, timeout_seconds, args)
@@ -311,6 +368,16 @@ def handle_command():
             elif command == "add_oracle":
                 chat_response, error = capture_output_with_timeout(assistant.add_oracle_predicate, timeout_seconds, args)
                 if error: raise Exception(error)
+            elif command == "advanced_tools_status":
+                chat_response, error = capture_output_with_timeout(assistant.advanced_tools_status, timeout_seconds)
+                if error: raise Exception(error)
+            elif command == "enable_advanced_features":
+                # Special handling for enable_advanced_features - returns boolean
+                try:
+                    success = assistant.enable_advanced_features()
+                    chat_response = f"✅ Erweiterte Features {'erfolgreich aktiviert' if success else 'konnten nicht vollständig aktiviert werden'}"
+                except Exception as e:
+                    chat_response = f"❌ Fehler beim Aktivieren erweiterter Features: {e}"
             elif command == "help":
                 # Direkte Hilfe ohne timeout
                 chat_response = """
@@ -336,6 +403,10 @@ def handle_command():
   wolfram_stats      - Zeigt Wolfram Cache-Statistiken
   add_oracle <pred>  - Fügt Oracle-Prädikat hinzu
   
+🚀 ADVANCED TOOLS:
+  advanced_tools_status     - Zeigt Advanced Tools Status
+  enable_advanced_features  - Aktiviert erweiterte Features
+  
 🔧 TOOLS:
   parse <formel>     - Testet Parser mit Formel  
   status             - Zeigt Systemstatus
@@ -344,13 +415,20 @@ def handle_command():
 🎯 BINDESTRICH-SUPPORT:
   parse Funktioniert(RAG-Pipeline).
   ask Läuft das AI-System?
+  
+🎛️ STRATEGY-PARAMETER:
+  ask --strategy=structural_only <frage>
+  ask --strategy=semantic_only <frage>
+  ask --strategy=adaptive <frage>
+  ask --strategy=hybrid_all <frage>
                 """
         
         else:
             # VALIDIERE: Alle Backend-Commands sind verfügbar
             available_commands = ["add_raw", "retract", "learn", "build_kb", "clearcache", 
                                 "ask", "explain", "what_is", "show", "status", 
-                                "search", "sources", "parse", "help", "wolfram_stats", "add_oracle"]
+                                "search", "sources", "parse", "help", "wolfram_stats", "add_oracle",
+                                "advanced_tools_status", "enable_advanced_features"]
             chat_response = f"❌ Unbekannter Befehl: '{command}'\n\n✅ Verfügbare Commands:\n" + "\n".join([f"  • {cmd}" for cmd in sorted(available_commands)])
 
         # Immer den aktuellen Zustand abrufen

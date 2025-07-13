@@ -51,6 +51,10 @@ class Fact:
     def entities(self) -> Set[str]:
         """Extract all entities from the fact"""
         return {self.subject, self.object}
+    
+    def to_text(self) -> str:
+        """Convert fact to text representation"""
+        return f"{self.subject} {self.predicate} {self.object}"
 
     def __hash__(self):
         return hash(self.id)

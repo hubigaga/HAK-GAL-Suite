@@ -144,19 +144,50 @@ class AdvancedRelevanceManagerAdapter:
                 # Async generator to list conversion
                 async def collect_results():
                     result_list = []
-                    async for fact in self.orchestrator.query(
-                        query_string, user_id=user_id, max_results=max_results
-                    ):
-                        legacy_fact = self._convert_to_legacy_fact(fact)
-                        result_list.append(LegacyRelevanceResult(
-                            fact=legacy_fact,
-                            score=getattr(fact, 'confidence', 1.0),
-                            reason=f"Advanced orchestrator match"
-                        ))
+                    # Fix: Handle both sync and async orchestrator methods
+                    try:
+                        query_results = self.orchestrator.query(
+                            query_string, user_id=user_id, max_results=max_results
+                        )
+                        
+                        # Check if result is awaitable (coroutine)
+                        if hasattr(query_results, '__await__'):
+                            query_results = await query_results
+                        
+                        # Handle both list and async generator returns
+                        if hasattr(query_results, '__aiter__'):
+                            # If it's truly async iterable
+                            async for fact in query_results:
+                                legacy_fact = self._convert_to_legacy_fact(fact)
+                                result_list.append(LegacyRelevanceResult(
+                                    fact=legacy_fact,
+                                    score=getattr(fact, 'confidence', 1.0),
+                                    reason=f"Advanced orchestrator match"
+                                ))
+                        else:
+                            # If it's a regular list/iterable
+                            for fact in query_results:
+                                legacy_fact = self._convert_to_legacy_fact(fact)
+                                result_list.append(LegacyRelevanceResult(
+                                    fact=legacy_fact,
+                                    score=getattr(fact, 'confidence', 1.0),
+                                    reason=f"Advanced orchestrator match"
+                                ))
+                    except Exception as e:
+                        logger.error(f"Error in orchestrator query: {e}")
+                        # Fallback to empty results
+                        result_list = []
+                        
                     return result_list
                 
                 results = loop.run_until_complete(collect_results())
-                logger.debug(f"Advanced Query: {len(results)} Ergebnisse")
+                
+                # If no results from advanced query, try fallback
+                if not results:
+                    logger.warning("Advanced query returned no results, falling back to simple query")
+                    results = self._query_fallback(query_string, max_results)
+                else:
+                    logger.debug(f"Advanced Query: {len(results)} Ergebnisse")
                 
             finally:
                 loop.close()

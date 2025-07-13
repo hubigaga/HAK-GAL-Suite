@@ -1,6 +1,5 @@
 # HAK-GAL Suite: A Hybrid Reasoning Framework
 
-![PyPI](https://img.shields.io/pypi/v/hak-gal)
 ![Build Status](https://github.com/sookoothaii/HAK-GAL-Suite/actions/workflows/ci.yml/badge.svg)
 ![Sentry](https://img.shields.io/badge/Sentry-Monitor-green)
 

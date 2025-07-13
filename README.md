@@ -1,5 +1,11 @@
 # HAK-GAL Suite: A Hybrid Reasoning Framework
 
+![PyPI](https://img.shields.io/pypi/v/hak-gal)
+![Build Status](https://github.com/sookoothaii/HAK-GAL-Suite/actions/workflows/ci.yml/badge.svg)
+![Sentry](https://img.shields.io/badge/Sentry-Monitor-green)
+
+HAK-GAL is a scalable AI-reasoning framework that integrates neural flexibility with symbolic verification and real-time monitoring.
+
 ## 1. Abstract
 
 HAK-GAL (Hybrid Assertion Knowledge & Grounded Assertion Logic) is a modular software framework designed to integrate the semantic processing capabilities of Large Language Models (LLMs) with the formal rigor of symbolic logic. The primary objective is to facilitate robust, verifiable, and explainable reasoning. This is achieved by grounding all inferences in a formally consistent knowledge base, which is managed and validated by a portfolio of specialized logical and computational provers. This architecture is explicitly engineered to mitigate the risk of factual inaccuracies inherent in purely generative models.

@@ -9,9 +9,12 @@ import { Separator } from "@/components/ui/separator";
 import { 
   Trash2, Send, Upload, Loader2, Sun, Moon, 
   Brain, Database, MessageSquare, FileText,
-  Settings, Activity, Cpu
+  Settings, Activity, Cpu, CheckCircle, XCircle,
+  Eye, EyeOff, Copy, BookOpen, Lightbulb, ArrowRight,
+  Filter, RefreshCw, Plus, Minus
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useTheme } from "@/hooks/useTheme";
 import OrchestratorDashboard from "@/components/orchestrator/OrchestratorDashboard";
 import AdvancedQueryBuilder from "@/components/query/AdvancedQueryBuilder";
@@ -20,6 +23,23 @@ type Message = {
   type: "user" | "system";
   content: string;
   timestamp?: string;
+  facts?: ExtractedFact[];
+  rawResponse?: string;
+};
+
+type ExtractedFact = {
+  id: string;
+  content: string;
+  confidence: 'high' | 'medium' | 'low';
+  category: 'rule' | 'fact' | 'relationship' | 'property';
+  selected: boolean;
+  source: string;
+};
+
+type LearningItem = {
+  content: string;
+  selected: boolean;
+  source: 'suggestion' | 'manual' | 'extracted';
 };
 
 const Index = () => {
@@ -37,10 +57,92 @@ const Index = () => {
   const [ragContext, setRagContext] = useState("No context loaded yet.");
   const [llmStatus, setLlmStatus] = useState<{llm_count: number, llm_active: number, llm_providers: any[]}>({llm_count: 0, llm_active: 0, llm_providers: []});
   
+  // Human-in-the-Loop Learning States
+  const [selectedFacts, setSelectedFacts] = useState<Set<string>>(new Set());
+  const [showFactExtraction, setShowFactExtraction] = useState(true);
+  const [factFilter, setFactFilter] = useState<'all' | 'selected' | 'unselected'>('all');
+  const [learningItems, setLearningItems] = useState<LearningItem[]>([]);
+  const [showFullResponses, setShowFullResponses] = useState(false);
+  
   // NEUE: Wolfram Status State
   const [wolframLoaded, setWolframLoaded] = useState<boolean>(false);
   
   const conversationEndRef = useRef<null | HTMLDivElement>(null);
+
+  // === FACT EXTRACTION UTILITIES ===
+  const extractFactsFromResponse = (response: string): ExtractedFact[] => {
+    const facts: ExtractedFact[] = [];
+    
+    // Pattern matching für verschiedene Fakttypen
+    const patterns = [
+      // Logische Regeln: Wenn X, dann Y
+      { regex: /(?:Wenn|If)\s+(.+?)\s*,\s*(?:dann|then)\s+(.+?)\./gi, category: 'rule' as const },
+      // Fakten: X ist Y
+      { regex: /(\w+)\s+(?:ist|is)\s+(.+?)\./gi, category: 'fact' as const },
+      // Beziehungen: X hat Y, X gehört zu Y
+      { regex: /(\w+)\s+(?:hat|gehört zu|belongs to|has)\s+(.+?)\./gi, category: 'relationship' as const },
+      // Eigenschaften: X kann Y, X verfügt über Y
+      { regex: /(\w+)\s+(?:kann|verfügt über|can|has the ability to)\s+(.+?)\./gi, category: 'property' as const }
+    ];
+    
+    patterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.regex.exec(response)) !== null) {
+        const fullMatch = match[0];
+        const confidence = fullMatch.length > 50 ? 'high' : fullMatch.length > 20 ? 'medium' : 'low';
+        
+        facts.push({
+          id: `fact_${Date.now()}_${facts.length}`,
+          content: fullMatch.trim(),
+          confidence,
+          category: pattern.category,
+          selected: false,
+          source: 'llm_response'
+        });
+      }
+    });
+    
+    return facts;
+  };
+  
+  const toggleFactSelection = (factId: string) => {
+    setSelectedFacts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(factId)) {
+        newSet.delete(factId);
+      } else {
+        newSet.add(factId);
+      }
+      return newSet;
+    });
+  };
+  
+  const learnSelectedFacts = async () => {
+    const selectedFactsArray = conversationHistory
+      .flatMap(msg => msg.facts || [])
+      .filter(fact => selectedFacts.has(fact.id));
+    
+    for (const fact of selectedFactsArray) {
+      try {
+        await sendCommandToBackend(`add_raw ${fact.content}`);
+        console.log(`✅ Learned fact: ${fact.content}`);
+      } catch (error) {
+        console.error(`❌ Failed to learn fact: ${fact.content}`, error);
+      }
+    }
+    
+    // Clear selections after learning
+    setSelectedFacts(new Set());
+  };
+  
+  const learnSingleFact = async (fact: ExtractedFact) => {
+    try {
+      await sendCommandToBackend(`add_raw ${fact.content}`);
+      console.log(`✅ Learned single fact: ${fact.content}`);
+    } catch (error) {
+      console.error(`❌ Failed to learn fact: ${fact.content}`, error);
+    }
+  };
 
   useEffect(() => {
     conversationEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -183,10 +285,21 @@ const Index = () => {
         
         if (data.chatResponse) {
           console.log("💬 Adding system message. Content length:", data.chatResponse.length);
+          
+          // Extract facts from LLM response
+          const extractedFacts = extractFactsFromResponse(data.chatResponse);
+          
           setConversationHistory(prev => {
-            const newHistory = [...prev, { type: "system", content: data.chatResponse }];
+            const newMessage: Message = {
+              type: "system", 
+              content: data.chatResponse,
+              facts: extractedFacts,
+              rawResponse: data.chatResponse,
+              timestamp: new Date().toISOString()
+            };
+            const newHistory = [...prev, newMessage];
             console.log("✅ System Message hinzugefügt. Neue Länge:", newHistory.length);
-            console.log("📝 Message Content Preview:", data.chatResponse.substring(0, 100) + "...");
+            console.log(`🧠 Extracted ${extractedFacts.length} facts from response`);
             return newHistory;
           });
         } else {
@@ -313,14 +426,16 @@ const Index = () => {
           color: theme.colors.textSecondary
         }}
       >
-        🔧 DEBUG: Messages: {conversationHistory.length} | Knowledge: {permanentKnowledge.length} | Suggestions: {learningSuggestions.length} | Docs: {dataSources.length} | RAG: {ragContext.length > 50 ? "loaded" : "empty"} | Wolfram: {wolframLoaded ? "YES" : "NO"}
+        🔧 DEBUG: Messages: {conversationHistory.length} | Knowledge: {permanentKnowledge.length} | Suggestions: {learningSuggestions.length} | Docs: {dataSources.length} | RAG: {ragContext.length > 50 ? "loaded" : "empty"} | Wolfram: {wolframLoaded ? "YES" : "NO"} | Selected Facts: {selectedFacts.size}
         <button 
           onClick={() => console.log("Current State:", { 
             conversationHistory: conversationHistory.length, 
             permanentKnowledge, 
             learningSuggestions, 
             dataSources, 
-            ragContext: ragContext.substring(0, 100) + "..."
+            ragContext: ragContext.substring(0, 100) + "...",
+            selectedFacts: Array.from(selectedFacts),
+            extractedFactsTotal: conversationHistory.reduce((sum, msg) => sum + (msg.facts?.length || 0), 0)
           })}
           className="ml-2 px-2 py-1 rounded hover:opacity-80"
           style={{ backgroundColor: theme.colors.warning + '20' }}
@@ -521,54 +636,189 @@ const Index = () => {
             }}
           >
           <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2" style={{ color: theme.colors.text }}>
-              <MessageSquare className="h-5 w-5" style={{ color: theme.colors.primary }} />
-              Interaction Panel
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2" style={{ color: theme.colors.text }}>
+                <MessageSquare className="h-5 w-5" style={{ color: theme.colors.primary }} />
+                Interaction Panel
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFullResponses(!showFullResponses)}
+                  className="flex items-center gap-1"
+                >
+                  {showFullResponses ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  {showFullResponses ? 'Compact' : 'Full'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFactExtraction(!showFactExtraction)}
+                  className="flex items-center gap-1"
+                >
+                  <Brain className="h-3 w-3" />
+                  Facts
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col overflow-hidden">
+            {/* Learning Controls */}
+            {showFactExtraction && selectedFacts.size > 0 && (
+              <div className="mb-4 p-3 rounded-lg border" style={{ 
+                backgroundColor: theme.colors.warning + '20',
+                borderColor: theme.colors.warning + '40'
+              }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium" style={{ color: theme.colors.text }}>
+                    {selectedFacts.size} facts selected for learning
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => setSelectedFacts(new Set())}
+                      variant="outline"
+                    >
+                      <XCircle className="h-3 w-3 mr-1" />
+                      Clear
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={learnSelectedFacts}
+                      style={{ backgroundColor: theme.colors.success, color: 'white' }}
+                    >
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Learn Selected
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <ScrollArea className="flex-1 mb-4 pr-4">
               <div className="space-y-4">
                 {conversationHistory.map((message, index) => (
-                  <div 
-                    key={`msg-${index}-${message.timestamp}`} 
-                    className={`p-4 rounded-lg border transition-all ${
-                      message.type === 'user' 
-                        ? 'ml-8' 
-                        : 'mr-8'
-                    }`}
-                    style={{ 
-                      backgroundColor: message.type === 'user' 
-                        ? theme.colors.primary + '10'
-                        : theme.colors.surface,
-                      borderColor: message.type === 'user'
-                        ? theme.colors.primary + '40'
-                        : theme.colors.border
-                    }}
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="mt-1 text-lg">
-                        {message.type === 'user' ? '👤' : '🤖'}
-                      </span>
-                      <div className="flex-1">
-                        <div 
-                          className="font-sans text-sm leading-relaxed overflow-x-auto"
-                          style={{ 
-                            color: theme.colors.text,
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                            maxWidth: '100%'
-                          }}
-                        >
-                          {message.content}
-                        </div>
-                        {message.timestamp && (
-                          <div className="text-xs mt-2" style={{ color: theme.colors.textMuted }}>
-                            {new Date(message.timestamp).toLocaleTimeString()}
+                  <div key={`msg-${index}-${message.timestamp}`}>
+                    {/* Main Message */}
+                    <div 
+                      className={`p-4 rounded-lg border transition-all ${
+                        message.type === 'user' 
+                          ? 'ml-8' 
+                          : 'mr-8'
+                      }`}
+                      style={{ 
+                        backgroundColor: message.type === 'user' 
+                          ? theme.colors.primary + '10'
+                          : theme.colors.surface,
+                        borderColor: message.type === 'user'
+                          ? theme.colors.primary + '40'
+                          : theme.colors.border
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="mt-1 text-lg">
+                          {message.type === 'user' ? '👤' : '🤖'}
+                        </span>
+                        <div className="flex-1">
+                          <div 
+                            className="font-sans text-sm leading-relaxed overflow-x-auto"
+                            style={{ 
+                              color: theme.colors.text,
+                              whiteSpace: showFullResponses ? 'pre-wrap' : 'normal',
+                              wordBreak: 'break-word',
+                              maxWidth: '100%',
+                              maxHeight: showFullResponses ? 'none' : '200px',
+                              overflow: showFullResponses ? 'visible' : 'hidden'
+                            }}
+                          >
+                            {showFullResponses 
+                              ? message.content 
+                              : message.content.substring(0, 300) + (message.content.length > 300 ? '...' : '')
+                            }
                           </div>
-                        )}
+                          {message.timestamp && (
+                            <div className="text-xs mt-2" style={{ color: theme.colors.textMuted }}>
+                              {new Date(message.timestamp).toLocaleTimeString()}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    
+                    {/* Extracted Facts Panel */}
+                    {showFactExtraction && message.facts && message.facts.length > 0 && (
+                      <div className="mt-2 mr-8 ml-12">
+                        <div 
+                          className="p-3 rounded-lg border"
+                          style={{
+                            backgroundColor: theme.colors.accent + '10',
+                            borderColor: theme.colors.accent + '30'
+                          }}
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <Lightbulb className="h-4 w-4" style={{ color: theme.colors.accent }} />
+                            <span className="text-xs font-medium" style={{ color: theme.colors.textSecondary }}>
+                              Extracted Facts ({message.facts.length})
+                            </span>
+                          </div>
+                          <div className="space-y-2">
+                            {message.facts.map((fact) => (
+                              <div 
+                                key={fact.id}
+                                className="flex items-start gap-2 p-2 rounded border"
+                                style={{
+                                  backgroundColor: selectedFacts.has(fact.id) 
+                                    ? theme.colors.success + '20' 
+                                    : theme.colors.background,
+                                  borderColor: selectedFacts.has(fact.id)
+                                    ? theme.colors.success + '40'
+                                    : theme.colors.border
+                                }}
+                              >
+                                <Checkbox
+                                  checked={selectedFacts.has(fact.id)}
+                                  onCheckedChange={() => toggleFactSelection(fact.id)}
+                                  className="mt-0.5"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs font-mono" style={{ color: theme.colors.text }}>
+                                    {fact.content}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <Badge 
+                                      variant="outline" 
+                                      className="text-xs px-1 py-0"
+                                      style={{
+                                        borderColor: fact.confidence === 'high' 
+                                          ? theme.colors.success 
+                                          : fact.confidence === 'medium' 
+                                          ? theme.colors.warning 
+                                          : theme.colors.error
+                                      }}
+                                    >
+                                      {fact.confidence}
+                                    </Badge>
+                                    <Badge variant="outline" className="text-xs px-1 py-0">
+                                      {fact.category}
+                                    </Badge>
+                                  </div>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => learnSingleFact(fact)}
+                                  className="h-6 w-6 p-0"
+                                  title="Learn this fact immediately"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {isLoading && (
